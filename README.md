@@ -1,7 +1,3 @@
-# OMLbots
+# MetaLearn
 
-Bot that executes (random) experiments on OpenML datasets and uploads the results on the OpenML platform. 
-
-The main function of the bot can be executed via `runBot`. 
-
-See executed runs on the openml.org page: https://www.openml.org/u/2702
+Recommendation of hyperparameters. Based on results on experiments on OpenML that were run with the help of the [OpenML-Bot](https://github.com/ja-thomas/OMLbots). 

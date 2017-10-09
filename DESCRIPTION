@@ -1,9 +1,8 @@
-Package: OMLbot2
-Title: Bot to run experiments on OpenML
-Version: 0.0.0.9000
-Authors@R: person("Janek", "Thomas", email = "janek.thomas@stat.uni-muenchen.de", role = c("aut", "cre"))
-Description: Run more or less random experiments on 'OpenML'. Sampling procedure
-    can be customized.
+Package: MetaLearn
+Title: Meta-Learning for supervised learning algorithms
+Version: 0.1
+Authors@R: person("Philipp", "Probst", email = "philipp_probst@gmx.de", role = c("aut", "cre"))
+Description: Do Meta-Learning: Recommend hyperparameters given a dataset
 Depends:
     mlr (>= 2.10),
     ParamHelpers (>= 1.8),
@@ -23,5 +22,4 @@ License: GPL-2
 Encoding: UTF-8
 LazyData: true
 Imports:
-    rscimark (>= 1.0)
 RoxygenNote: 5.0.1
