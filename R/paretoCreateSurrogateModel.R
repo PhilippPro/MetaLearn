@@ -20,13 +20,13 @@
 #' @return surrogate model
 #' @export
 makeSurrogateModel = function(measure.name, learner.name, task.ids, lrn.par.set, tbl.results, tbl.hypPars, 
-  tbl.metaFeatures, tbl.runTime, tbl.resultsReference, surrogate.mlr.lrn, min.experiments = 100, benchmark = FALSE, time = FALSE) {
+  tbl.metaFeatures, tbl.runTime, tbl.scimark, tbl.resultsReference, surrogate.mlr.lrn, min.experiments = 200, benchmark = FALSE, time = FALSE) {
   
   param.set = lrn.par.set[[which(names(lrn.par.set) == paste0(substr(learner.name, 5, 100), ".set"))]]$param.set
   
   #train mlr model on full table for measure
   mlr.mod.measure = list()
-  task.data = makeBotTable(measure.name, learner.name, task.ids, tbl.results, tbl.metaFeatures, tbl.hypPars, tbl.runTime, tbl.resultsReference, param.set)
+  task.data = makeBotTable(measure.name, learner.name, task.ids, tbl.results, tbl.metaFeatures, tbl.hypPars, tbl.runTime, tbl.scimark, tbl.resultsReference, param.set)
   task.data = data.frame(task.data)
   # delete or Transform Missing values
   task.data[, names(param.set$pars)] = deleteNA(task.data[, names(param.set$pars), drop = FALSE])
@@ -40,14 +40,15 @@ makeSurrogateModel = function(measure.name, learner.name, task.ids, lrn.par.set,
   }
   
   if (time) {
-    mlr.task.measure = makeRegrTask(id = as.character(learner.name), subset(task.data, task_id %in% task.ids, select =  c(-task_id, -measure.value)), target = "runtime")
+    mlr.task.measure = makeRegrTask(id = as.character(learner.name), subset(task.data, task_id %in% task.ids, select =  c(-task_id, -measure.value)), target = "runtime", blocking = as.factor(task.data$task_id))
   } else {
-    mlr.task.measure = makeRegrTask(id = as.character(learner.name), subset(task.data, task_id %in% task.ids, select =  c(-task_id, -runtime)), target = "measure.value")
+    mlr.task.measure = makeRegrTask(id = as.character(learner.name), subset(task.data, task_id %in% task.ids, select =  c(-task_id, -runtime)), target = "measure.value", blocking = as.factor(task.data$task_id))
   }
   mlr.lrn = surrogate.mlr.lrn
   
   if(benchmark) {
-    rdesc = makeResampleDesc("RepCV", reps = 10, folds = 10)
+    rdesc = makeResampleDesc("RepCV", reps = 2, folds = 2)
+    set.seed(678)
     res = benchmark(mlr.lrn, mlr.task.measure, resamplings = rdesc, measures = list(mse, rsq, kendalltau, spearmanrho), 
       models = FALSE, keep.pred = FALSE)
     return(list(result = res))
@@ -71,12 +72,12 @@ makeSurrogateModel = function(measure.name, learner.name, task.ids, lrn.par.set,
 #'
 #' @return [\code{data.frame}] Complete table used for creating the surrogate model 
 #' @export
-makeBotTable = function(measure.name, learner.name, task.ids, tbl.results, tbl.metaFeatures, tbl.hypPars, tbl.runTime, tbl.resultsReference, param.set) {
+makeBotTable = function(measure.name, learner.name, task.ids, tbl.results, tbl.metaFeatures, tbl.hypPars, tbl.runTime, tbl.scimark, tbl.resultsReference, param.set) {
 
   # This is not used at the moment  
-  measure.name.filter = measure.name
+  #measure.name.filter = measure.name
   
-  tbl.runTime = scaleRunTime(tbl.runTime)
+  tbl.runTime = scaleRunTime(tbl.runTime, tbl.scimark)
   
   # Readjust tbl.hypPars.learner
   tbl.hypPars.learner = tbl.hypPars[tbl.hypPars$fullName == learner.name, ]
@@ -97,18 +98,25 @@ makeBotTable = function(measure.name, learner.name, task.ids, tbl.results, tbl.m
   bot.table = inner_join(tbl.results, tbl.hypPars.learner, by = "setup") %>%
     inner_join(., tbl.metaFeatures.adj, by = "data_id") %>%
     inner_join(., tbl.runTime, by = "run_id") %>%
-    select(., -run_id, -setup, -fullName, -scimark)
+    select(., -run_id, -setup, -fullName)
   
   # Scale mtry in random forest
   if(learner.name == "mlr.classif.ranger"){
     n_feats = filter(tbl.metaFeatures, quality == "NumberOfFeatures") %>%
       select(., -quality)
     n_feats$value = as.numeric(n_feats$value)
-    
     bot.table = inner_join(bot.table, n_feats, by = "data_id")
     bot.table$mtry = bot.table$mtry/bot.table$value
     bot.table = bot.table %>% select(., -value)
+    
+    n_inst = filter(tbl.metaFeatures, quality == "NumberOfInstances") %>%
+      select(., -quality)
+    n_inst$value = as.numeric(n_inst$value)
+    bot.table = inner_join(bot.table, n_inst, by = "data_id")
+    bot.table$min.node.size = log(bot.table$min.node.size, 2) / log(bot.table$value, 2)
+    bot.table = bot.table %>% select(., -value)
   }
+  
   
   bot.table = bot.table %>%  select(., -data_id)
   colnames(bot.table)[2] = "measure.value"
@@ -122,7 +130,7 @@ makeBotTable = function(measure.name, learner.name, task.ids, tbl.results, tbl.m
   bot.table = bot.table %>%
     inner_join(., tbl.resultsReference, by = "task_id")
   
-  # there are missing some reference learners for some task_ids...
+  # there are missing some reference learners for some task_ids...!!
   # this can be changed!
   bot.table$measure.value = bot.table$measure.value - bot.table$avg + 0.5
   bot.table = bot.table %>%  select(., -avg)
@@ -148,9 +156,9 @@ conversion_function = function(x, param_type) {
 #' Scale the run time results with the sci.mark results
 #' @param tbl.runTime The runtime table
 #' @export
-scaleRunTime = function(tbl.runTime) {
-  tbl.runTime$scimark = tbl.runTime$scimark / median(tbl.runTime$scimark, na.rm = T)
-  tbl.runTime$runtime = tbl.runTime$runtime / tbl.runTime$scimark
+scaleRunTime = function(tbl.runTime, tbl.scimark) {
+  tbl.scimark$scimark = tbl.scimark$scimark / median(tbl.scimark$scimark, na.rm = T)
+  tbl.runTime$runtime = tbl.runTime$runtime / tbl.scimark$scimark
   return(tbl.runTime)
 }
 

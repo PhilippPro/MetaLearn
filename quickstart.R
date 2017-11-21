@@ -1,10 +1,7 @@
 library(devtools)
 load_all()
+load_all("/home/probst/Paper/Exploration_of_Hyperparameters/OMLbots")
 
-# On LRZ
-# Serial cluster
-setOMLConfig(apikey = "34ebc7dff3057d8e224e5beac53aea0e")
-max.resources = list(walltime = 3600*5, memory = 2000)
 lrn.par.set = getMultipleLearners()
 simple.lrn.par.set = getSimpleLearners()
 
@@ -14,9 +11,11 @@ path = paste0("/home/probst/Paper/Exploration_of_Hyperparameters/OMLbots", "/mlr
 local.db = src_sqlite(path, create = FALSE)
 
 tbl.results = collect(tbl(local.db, sql("SELECT * FROM [tbl.results]")), n = Inf)
+# maybe use less results, as runtime is too high...
 tbl.metaFeatures = collect(tbl(local.db, sql("SELECT * FROM [tbl.metaFeatures]")), n = Inf)
 tbl.hypPars = collect(tbl(local.db, sql("SELECT * FROM [tbl.hypPars]")), n = Inf)
 tbl.runTime = collect(tbl(local.db, sql("SELECT * FROM [tbl.runTime]")), n = Inf)
+tbl.scimark = collect(tbl(local.db, sql("SELECT * FROM [tbl.scimark]")), n = Inf)
 tbl.resultsReference = collect(tbl(local.db, sql("SELECT * FROM [tbl.resultsReference]")), n = Inf)
 
 # get learner names
@@ -35,11 +34,11 @@ for (i in seq_along(learner.names)) {
   print(i)
   surrogate.measures[[i]] = makeSurrogateModel(measure.name = "area.under.roc.curve", 
     learner.name = learner.names[i], task.ids, lrn.par.set, tbl.results, tbl.hypPars, 
-    tbl.metaFeatures, tbl.runTime, tbl.resultsReference, surrogate.mlr.lrn)
+    tbl.metaFeatures, tbl.runTime, tbl.scimark, tbl.resultsReference, surrogate.mlr.lrn)
   
   surrogate.time[[i]] = makeSurrogateModel(measure.name = "area.under.roc.curve", 
     learner.name = learner.names[i], task.ids, lrn.par.set, tbl.results, tbl.hypPars, 
-    tbl.metaFeatures, tbl.runTime, tbl.resultsReference, surrogate.mlr.lrn, time = TRUE)
+    tbl.metaFeatures, tbl.runTime, tbl.scimark, tbl.resultsReference, surrogate.mlr.lrn, time = TRUE)
   save(surrogate.measures, surrogate.time, file = "surrogates.RData")
 }
 names(surrogate.measures) = learner.names
@@ -62,11 +61,11 @@ for (i in seq_along(learner.names)) {
   print(i)
   surrogate.measures.benchmark[[i]] = makeSurrogateModel(measure.name = "area.under.roc.curve", 
     learner.name = learner.names[i], task.ids, lrn.par.set, tbl.results, tbl.hypPars, 
-    tbl.metaFeatures, tbl.runTime, tbl.resultsReference, surrogate.mlr.lrns, benchmark = TRUE)
+    tbl.metaFeatures, tbl.runTime, tbl.scimark, tbl.resultsReference, surrogate.mlr.lrns, benchmark = TRUE)
  
   surrogate.time.benchmark[[i]] = makeSurrogateModel(measure.name = "area.under.roc.curve", 
     learner.name = learner.names[i], task.ids, lrn.par.set, tbl.results, tbl.hypPars, 
-    tbl.metaFeatures, tbl.runTime, tbl.resultsReference, surrogate.mlr.lrns, benchmark = TRUE, time = TRUE)
+    tbl.metaFeatures, tbl.runTime, tbl.scimark, tbl.resultsReference, surrogate.mlr.lrns, benchmark = TRUE, time = TRUE)
 }
 
 names(surrogate.measures.benchmark) = learner.names
